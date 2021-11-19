@@ -305,7 +305,7 @@ class Voronoi:
 
         return c / (6 * area(vertices))
         
-    def lloyd(self, threshold = 0.01, MAXDEPTH=100):
+    def lloyd(self, threshold = 0.05, MAXDEPTH=100, verbose = True):
         """
         Performs lloyd relaxation on a voronoi diagram object
         """
@@ -316,8 +316,11 @@ class Voronoi:
             old_centroids = np.copy(centroids)
             self.sites = centroids
             centroids = np.array([self.centroid(i) for i in range(self.N)])
-            if np.all(abs(centroids - old_centroids)/ old_centroids < threshold):
-                print(f"Centroids within {threshold * 100}% after {i+1} iterations of Lloyd relaxation")
+            convergence = abs(centroids - old_centroids)/ old_centroids
+            if verbose:
+                print(f'Centroids shifted by up to {np.max(convergence)*100:.2f}% after {i+1} iterations', end='\r')
+            if np.all(convergence < threshold):
+                print(f"All Centroids within {threshold * 100}% after {i+1} iterations of Lloyd relaxation")
                 break
         return
     
@@ -368,7 +371,6 @@ class Voronoi:
                 ax.add_patch(plt.Circle((site[0], site[1]), 
                                         np.sqrt(self.weights[i]), 
                                         color='black', fill=False, lw=0.5, ls='--'))
-
         ax.set_title('Power Diagram')
         ax.tick_params(left=False,
                 bottom=False,
@@ -377,7 +379,37 @@ class Voronoi:
         # Fix aspect ratio so pixels are always square
         ax.set_aspect('equal')
         
+class TesselatedImage(Voronoi):
+    """
+    Subclass for applying weighted voronoi tesselations onto an image 
+    using the pixel intensities as weights which update with the locations of the sites
+    """
+    def __init__(self, sites, image):
+        self.image = image
+        # Define the weights as the intensity of the image in the pixel that each site sits on
+        idxs = sites.astype(int)
+        weights = self.image[idxs[:,1], idxs[:,0]]
+        super().__init__(sites, self.image.shape, weights)
+        
+    @Voronoi.sites.setter
+    def sites(self, points):
+        """
+        Setter function for the sites of the power diagram, updating the weights 
+        with the image intensities.
+        """
+        if points.size != self._sites.size:
+            #raise ValueError('The number of sites for this power diagram has changed!')
+            print('The number of sites for this power diagram has changed!')
+            self.N = points.shape[0]
+        self._sites = points
+        idxs = points.astype(int)
+        self._weights = self.image[idxs[:,1], idxs[:,0]]
+        
+        # if the sites change, we need to recalculate the power diagram.
+        self.regions = self.get_Voronoi()
+    
 
+        
 def centroid(vertices):
     """
     Calculate the centroid of a polygon from its vertices
