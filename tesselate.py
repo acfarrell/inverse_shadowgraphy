@@ -320,7 +320,7 @@ class Voronoi:
             if verbose:
                 print(f'Centroids shifted by up to {np.max(convergence)*100:.2f}% after {i+1} iterations', end='\r')
             if np.all(convergence < threshold):
-                print(f"All Centroids within {threshold * 100}% after {i+1} iterations of Lloyd relaxation")
+                print(f"All centroids within {threshold * 100}% after {i+1} iterations of Lloyd relaxation")
                 break
         return
     
@@ -379,7 +379,7 @@ class Voronoi:
         # Fix aspect ratio so pixels are always square
         ax.set_aspect('equal')
         
-class TesselatedImage(Voronoi):
+class TessellatedImage(Voronoi):
     """
     Subclass for applying weighted voronoi tesselations onto an image 
     using the pixel intensities as weights which update with the locations of the sites
