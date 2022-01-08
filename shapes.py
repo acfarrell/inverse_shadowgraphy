@@ -1,3 +1,7 @@
+'''
+Classes and functions for creating and manipulating polygons, with and without weighted
+statistics based on an image
+'''
 import numpy as np
 import matplotlib.pyplot as plt
 import rasterize as ras
@@ -58,13 +62,32 @@ class Polygon:
         self.vertices = clipped
         return
     
-    def plot(self, ax = None, **kwargs):
+    def plot(self, ax = None, plot_points = True, **kwargs):
         if ax is None:
             ax = plt.gca()
+        if 'facecolor' not in kwargs:
+            kwargs['facecolor'] = (0,0,0,0)
+        if 'edgecolor' not in kwargs:
+            kwargs['edgecolor'] = 'k'
         verts = self.vertices.T
         ax.fill(verts[0], verts[1], **kwargs)
+        
+        if plot_points:
+            ax.plot(verts[0], verts[1], 'o', c = kwargs['edgecolor'], zorder=3)
+        
         ax.set_aspect('equal')
 
+def clockwise_sort(verts):
+    '''Sort an array of polygon vertices into clockwise order'''
+    # Calculate the mean coordinate to estimate the center of the polygon (for clockwise sorting)
+    if verts.shape[0] == 1:
+        return verts
+    center = np.mean(verts, axis=0)
+    # sort the vertices in clockwise order
+    sorted_verts = np.array(sorted(verts,
+                                   key = lambda v: np.arctan2((v[0] - center[0]), 
+                                                              (v[1] - center[1]))))
+    return sorted_verts
 
 class Pixel(Polygon):
     ''' A pixel is defined by a single point at its center, with assumed area of 1 '''
@@ -74,7 +97,82 @@ class Pixel(Polygon):
         vertices = np.array([[l, b], [l, t], [r, t], [r, b]])
         super().__init__(vertices)
         
+class Triangle(Polygon):
+    '''A triangle is the same as a polygon, but has functions for circumcircles that don't 
+    apply to all polygons'''
+    def __init__(self, vertices):
+        # Check that there are precisely three vertices
+        if vertices.shape[0] != 3:
+            print(f'WARNING: A triangle must have three vertices, but {vertices.shape[0]} were given.')
+        super().__init__(vertices)
+        self._circumcenter, self._circumradius = self.get_circumcircle()
+    
+    @property
+    def circumcenter(self):
+        return self._circumcenter
+    
+    @property
+    def circumradius(self):
+        return self._circumradius
 
+    def get_circumcircle(self):
+        p_x, p_y = self.vertices[:,0][:, None], self.vertices[:,1][:, None]
+
+        side_lengths = (p_x**2 + p_y**2)
+        ones = np.ones((3,1))
+        S_x = np.hstack((side_lengths, p_y, ones))
+        S_y = np.hstack((p_x, side_lengths, ones))
+        
+        S_x = 1/2 * np.linalg.det(S_x)
+        S_y = 1/2 * np.linalg.det(S_y)
+        
+        a = np.linalg.det(np.hstack((p_x, p_y, ones)))
+        b = np.linalg.det(np.hstack((p_x, p_y, side_lengths)))
+        
+        center = np.array([S_x, S_y]) / a
+        radius = np.sqrt(b/a + (S_x**2 + S_y**2)/a**2)
+        
+        return center, radius
+    
+    def inside_circle(self, point):
+        c = self._circumcenter
+        d = np.sum((point - c)**2)
+        if d < self._circumradius**2:
+            return True
+        return False
+    
+    def plot(self, ax = None, plot_points = True, plot_circle = False, plot_center = False, circle_options = {}, **kwargs):
+        if ax is None:
+            ax = plt.gca()
+        if 'facecolor' not in kwargs:
+            kwargs['facecolor'] = (0,0,0,0)
+        if 'edgecolor' not in kwargs:
+            kwargs['edgecolor'] = 'k'
+        
+        if plot_circle:
+            if 'facecolor' not in circle_options:
+                circle_options['facecolor'] = (0,0,0,0)
+            if 'edgecolor' not in circle_options:
+                circle_options['edgecolor'] = 'k'
+            ax.add_patch(plt.Circle(self._circumcenter, self._circumradius, 
+                                    lw=0.5,
+                                    **circle_options))
+        if plot_center:
+            ax.plot(self._circumcenter[0], self._circumcenter[1], 'x', ms=2, mew=.5, 
+                    c=kwargs['edgecolor'])
+            
+        verts = self.vertices.T
+        ax.fill(verts[0], verts[1], **kwargs)
+        
+        if plot_points:
+            if 'zorder' not in kwargs:
+                zo = 1
+            else:
+                zo = kwargs['zorder']
+            ax.plot(verts[0], verts[1], 'o', c = kwargs['edgecolor'], zorder = zo)
+        
+        ax.set_aspect('equal')
+        
 class WeightedPolygon:
     '''
     Polygons defined by clockwise vertices, properties are weighted by the intensities
@@ -96,7 +194,7 @@ class WeightedPolygon:
         ''' Anytime the vertices change, we need to recalculate the shape stats '''
         self._vertices = vertices
         self.N = vertices.shape[0]
-        self.A, self.c, self.I = calculate_shape_stats(self)
+        self.A, self.c, self.I = calculate_weighted_stats(self)
 
     def clip_to(self, boundary):
         ''' clip the polygon to the given boundary polygon using Hodgman-Sutherland '''
@@ -132,14 +230,20 @@ class WeightedPolygon:
             clipped = edge_clipped
         self.vertices = clipped
         return
-    
-    def plot(self, ax = None, **kwargs):
-        if self.N == 0:
-            return
+     
+    def plot(self, ax = None, plot_points = True, **kwargs):
         if ax is None:
             ax = plt.gca()
+        if 'facecolor' not in kwargs:
+            kwargs['facecolor'] = (0,0,0,0)
+        if 'edgecolor' not in kwargs:
+            kwargs['edgecolor'] = 'k'
         verts = self.vertices.T
         ax.fill(verts[0], verts[1], **kwargs)
+        
+        if plot_points:
+            ax.plot(verts[0], verts[1], 'o', c = kwargs['edgecolor'], zorder=3)
+        
         ax.set_aspect('equal')
 
         
@@ -147,7 +251,7 @@ def calculate_shape_stats(polygon):
     ''' calculate the area, centroid, and moment of inertia of a 2D convex polygon given 
     by its vertices in clockwise order'''
     if polygon.N == 0:
-        return 0, (0,0), 0
+        return 0, (-1,-1), 0
     x1,y1 = polygon.vertices.T
     x2,y2 = np.roll(x1, -1), np.roll(y1, -1)
 
@@ -227,3 +331,30 @@ def get_intersect(line1, line2):
     if z == 0:
         return np.array([float('inf'), float('inf')])
     return np.array([x / z, y / z])
+
+def area(vertices):
+    x1,y1 = vertices.T
+    x2,y2 = np.roll(x1, -1), np.roll(y1, -1)
+
+    # Calculate the area
+    A = np.sum(x2 * y1 - x1 * y2) / 2.
+    return A
+
+def circumcenter(vertices):
+    p_x, p_y = vertices[:,0][:, None], vertices[:,1][:, None]
+
+    side_lengths = (p_x**2 + p_y**2)
+    ones = np.ones((3,1))
+    S_x = np.hstack((side_lengths, p_y, ones))
+    S_y = np.hstack((p_x, side_lengths, ones))
+
+    S_x = 1/2 * np.linalg.det(S_x)
+    S_y = 1/2 * np.linalg.det(S_y)
+
+    a = np.linalg.det(np.hstack((p_x, p_y, ones)))
+    #b = np.linalg.det(np.hstack((p_x, p_y, side_lengths)))
+
+    center = np.array([S_x, S_y]) / a
+    #radius = np.sqrt(b/a + (S_x**2 + S_y**2)/a**2)
+
+    return center#, radius

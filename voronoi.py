@@ -1,22 +1,24 @@
+'''
+Functions for calculating and managing Voronoi/power diagrams
+'''
 import numpy as np
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 from scipy.spatial import ConvexHull
 import multiprocessing as mp
 
-from shapes import Polygon, WeightedPolygon
-
+import shapes
 class Voronoi:
     """
     Class for calculating 2D power diagrams, i.e. weighted Voronoi tesselations
     """
-    def __init__(self, sites, shape, weights=None, image = None):
+    def __init__(self, sites, shape = None, weights=None, image = None, clip = True):
         self._sites = sites
         self.N = sites.shape[0]
-        self.shape = shape
-        h, w = shape
+        
+        #h, w = shape
         # Define the corner points of the box in clockwise order
-        self.box = Polygon(np.array([[0,0],[0,h-1],[w-1,h-1],[w-1,0]], dtype=float))
+        #self.box = shapes.Polygon(np.array([[0,0],[0,h],[w,h],[w,0]], dtype=float)-0.5)
         # Define each edge of the box
 
         if weights is None:
@@ -26,9 +28,11 @@ class Voronoi:
             
         if image is None:
             self.image = np.ones(shape)
+            self.shape = shape
         else:
             self.image = image
-        
+            self.shape = image.shape
+        self.clip = clip
         # Calculate the weighted Voronoi diagram
         self.get_Voronoi()
     
@@ -50,7 +54,6 @@ class Voronoi:
         
         # if the sites change, we need to recalculate the power diagram.
         self.get_Voronoi()
-
     
     @property
     def weights(self):
@@ -60,10 +63,10 @@ class Voronoi:
     @weights.setter
     def weights(self, values):
         """Setter function for the weights of each sites."""
-        self._weights = values
-        
         # if the weights change, we need to recalculate the power diagram.
-        self.get_Voronoi()
+        if not np.array_equal(values, self._weights):
+            self._weights = values
+            self.get_Voronoi()
     
     def get_Voronoi(self):
         """ Calculate the Voronoi tesselation using the projection onto a 3D paraboloid"""
@@ -84,10 +87,21 @@ class Voronoi:
         # Downward-facing faces of the hull give finite Delaunay triangles
         self.lowers = self.get_lower_facing()
         
+        # Save the finite triangles for use in natural neighbor interpolation and their
+        # corresponding circumcenters
+        delaunay_triangles = self.hull.simplices[self.lowers]
+        
+        self.triangles = delaunay_triangles
+        self.circumcenters = all_vertices[self.lowers]
+        # Get the circumradius of each delaunay triangle from its vertices and circumcenter
+        r = np.sqrt(np.sum((self.sites[self.triangles[:,0]] - self.circumcenters)**2, axis=1))
+        self.radii = r
+        
         # Determine the faces defining each edge of the Delaunay triangulation from the convex hull
         neighbors, infinite = self.get_delaunay_edges()
         
         triangles = self.hull.simplices[neighbors] # get the indices of the vertices of each Delaunay triangle
+       
         # Find the common edge between each pair of neighboring Delaunay triangles
         edge_sites = np.array([np.intersect1d(pair[0], pair[1]) for pair in triangles])
         self.delaunay_edges = edge_sites
@@ -108,18 +122,14 @@ class Voronoi:
         From all of the delaunay edges and Voronoi vertices get the vertices defining each
         cell in the power diagram and define a Polygon object for that cell
         '''
-        cells = []
-        centroids = np.zeros_like(self.sites)
-        areas = np.zeros(self.N)
-        moments = np.zeros(self.N)
-        
-        args = [(i, self.delaunay_edges, self.vertices, self.image) for i in range(self.N)]
+        args = [(i, self.delaunay_edges, self.vertices, self.image, self.clip) for i in range(self.N)]
         pool = mp.Pool()
         cells = pool.map(get_cell_wrapper, args)
-
+        
         self.regions = cells
         stats = [(cell.A, cell.c, cell.I) for cell in cells]
         stats = list(zip(*stats))
+        
         self.A, self.c, self.I = np.array(stats[0]), np.array(stats[1]), np.array(stats[2])
         
     def get_delaunay_edges(self):
@@ -223,29 +233,29 @@ class Voronoi:
         """
         return np.where(self.hull.equations[:,2] < 0)[0]
         
-    def lloyd(self, threshold = 0.05, MAXDEPTH=100, verbose = True):
+    def lloyd(self, threshold = 0.05, MAXDEPTH=50, verbose = True):
         """
         Performs lloyd relaxation on a voronoi diagram object
+        
+        Convergence occurs when the maximum relative shift in a centroid
         """
-        shape = self.shape
-        weights = self.weights
+        # Get threshold distance in pixels
         centroids = self.c
         for i in range(MAXDEPTH):
             old_centroids = np.copy(centroids)
             self.sites = centroids
             centroids = self.c
-            error = np.std(self.A)/(np.sqrt(self.N) * np.mean(self.A))
+            #error = np.std(self.A)/(np.sqrt(self.N) * np.mean(self.A))
+            
             convergence = abs(centroids - old_centroids)/ old_centroids
             if verbose:
                 print(f'Centroids shifted by up to {np.max(convergence)*100:.2f}% after {i+1} iterations', end='\r')
-                #print(f'Flux deviation {error*100:.2f}% after {i+1} iterations', end='\r')
             if np.all(convergence < threshold):
                 print(f"All centroids within {threshold * 100}% after {i+1} iterations of Lloyd relaxation")
-                #print(f"Relative error in flux is within {threshold * 100}% after {i+1} iterations of Lloyd relaxation")
                 break
         return
     
-    def plot(self, ax = None, sites = True, transparent = False, plot_weights = False, plot_delaunay = False):
+    def plot(self, ax = None, sites = True, transparent = False, plot_weights = False, plot_delaunay = False, plot_cells = True, plot_image = False,  **kwargs):
         """
         Plot the power diagram
         """
@@ -253,10 +263,16 @@ class Voronoi:
 
         if ax is None:
             ax = plt.gca()
-
-        ax.set_ylim((0,h-1))
-        ax.set_xlim((0,w-1))
         
+        # Fix the axes of the plot to the size of the image (taking into account pixel size on the edges)
+        ax.set_ylim((-.5,h-.5))
+        ax.set_xlim((-.5,w-.5))
+        
+        if plot_image:
+            transparent = True
+            Y, X = np.indices(self.shape)
+            ax.pcolormesh(X, Y, self.image, cmap='gray')
+
         colors = mpl.cm.get_cmap(name='rainbow')(np.linspace(0,1,self.N))
         
         if transparent:
@@ -264,7 +280,7 @@ class Voronoi:
             linecol = 'cyan'
             sitecol = 'red'
         else:
-            alph = 0.5
+            alph = 0.3
             linecol = 'black'
             sitecol = 'black'
         
@@ -274,7 +290,8 @@ class Voronoi:
                 ax.plot(pts[:,0], pts[:,1], 'b', lw = 0.5)
         for i, site in enumerate(self.sites):
             cell = self.regions[i]
-            cell.plot(ax=ax,facecolor=mpl.colors.to_rgba(colors[i],alph),edgecolor=linecol)
+            if plot_cells:
+                cell.plot(ax=ax,facecolor=mpl.colors.to_rgba(colors[i],alph),plot_points=False, edgecolor=linecol, **kwargs)
             if sites:
                 ax.plot(site[0], site[1], 'o', c = sitecol)
             if plot_weights:
@@ -289,14 +306,14 @@ class Voronoi:
         # Fix aspect ratio so pixels are always square
         ax.set_aspect('equal')
         
-def get_cell(i, edges, vertices, image):
+def get_cell(i, edges, vertices, image, clip = True):
     # Find the indices of the Delaunay edges containing each site
     edge_idx = np.argwhere(edges == i)[:,0]
 
     # Get the Voronoi vertices from each of those delaunay edges
     verts = vertices[edge_idx]
     if verts.size == 0:
-        return WeightedPolygon(verts, image)
+        return shapes.WeightedPolygon(verts, image)
 
     # Remove any duplicate vertices
     verts = np.unique(np.reshape(verts, (-1,2)), axis = 0)
@@ -305,7 +322,14 @@ def get_cell(i, edges, vertices, image):
     # Sort the vertices in clockwise order
     verts = np.array(sorted(verts,
                             key = lambda v: np.arctan2((v[0] - c[0]), (v[1] - c[1]))))
-    cell = WeightedPolygon(verts, image)
+    cell = shapes.WeightedPolygon(verts, image)
+    
+    if clip:
+        # Crop to bounding box
+        h, w = image.shape
+        box = shapes.Polygon(np.array([[0,0],[0,h],[w,h],[w,0]], dtype=float)-0.5)
+        cell.clip_to(box)
     return cell
+
 def get_cell_wrapper(args):
     return get_cell(*args)

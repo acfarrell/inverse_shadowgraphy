@@ -1,3 +1,9 @@
+'''
+Functions for rasterizing polygons onto a pixelated grid and determining the portion of
+each pixel inside and outside a given polygon. Clipping individual pixels like this is
+important for cases where the polygons and pixels are of similar volume, which is the 
+case in invert shadowgraphy calculations.
+'''
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.path import Path
