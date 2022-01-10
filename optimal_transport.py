@@ -79,18 +79,19 @@ def get_deflection_potential(target_image,source_image = None, N=100, lloyd_thre
     sites = target.sites[valid]
 
     print('Moving nearest sites to the corners of the image...')
-    centroids = move_to_corners(source_image.shape, centroids)
+    sites = move_to_corners(source_image.shape, sites)
     
     print('Interpolating the displacements...')
-    points = np.stack((centroids, sites))
-    disp = np.diff(points, axis=0)[0]
 
-    disp_x = griddata(centroids,disp[:,0],(X, Y), method= 'cubic' )
-    disp_y = griddata(centroids,disp[:,1],(X, Y), method= 'cubic' )
+    x_map = griddata(sites,centroids[:,0],(X, Y), method= 'cubic' )
+    y_map = griddata(sites,centroids[:,1],(X, Y), method= 'cubic' )
+    
+    alpha_x = x_map - X
+    alpha_y = y_map - Y
     
     print('Calculating the deflection potential...')
-    phi_x = np.cumsum(disp_x, axis=1)
-    phi_y = np.cumsum(disp_y, axis=0)
+    phi_x = np.cumsum(alpha_x, axis=1)
+    phi_y = np.cumsum(alpha_y, axis=0)
     
     phi = (phi_x + phi_y) / 2
     
@@ -118,12 +119,12 @@ def f(weights, source, target):
 
     return f, grad
 
-def move_to_corners(shape, centroids):
+def move_to_corners(shape, sites):
     h, w = shape
     corners = np.array([[0,0], [0,h],[w,h],[w,0]]) - 0.5
     from scipy.spatial import distance
     for corner in corners:
-        closest_index = distance.cdist([corner], centroids).argmin()
+        closest_index = distance.cdist([corner], sites).argmin()
 
-        centroids[closest_index] = corner
-    return centroids
+        sites[closest_index] = corner
+    return sites

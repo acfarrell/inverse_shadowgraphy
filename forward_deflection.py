@@ -6,11 +6,11 @@ from multiprocessing import Pool
 import shapes
 import rasterize
 
-def forward_map(source, phi_func, L = 1):
+def forward_map(source, phi_func):
     '''
     Given a source image (represented as a 2D numpy array) and a deflection potential function (of the 
     form phi(x, y)) project the source plane forward a distance L to determine the image at the 
-    target plane.
+    target plane.t
     '''
     h, w = source.shape
     # Get the indices of each pixel in the image
@@ -26,8 +26,8 @@ def forward_map(source, phi_func, L = 1):
     ay, ax = np.gradient(phi)
     
     # Calculate the final positions of each pixel corner after deflection
-    x = pix_x - ax * L
-    y = pix_y - ay * L
+    x = pix_x - ax 
+    y = pix_y - ay 
     points = np.stack((x, y)).T # [w, h, axis]
     
     # Get the contribution to the target image from each pixel in the source image

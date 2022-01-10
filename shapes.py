@@ -266,10 +266,10 @@ def calculate_shape_stats(polygon):
         cx = np.sum((x1 + x2) * (x2 * y1 - x1 * y2)) / (6*A)
         cy = np.sum((y1 + y2) * (x2 * y1 - x1 * y2)) / (6*A)
 
-    Ix = np.sum((y1**2 + y1 * y2 * y2**2) * (x2 * y1 - x1 * y2)) / 12.
-    Iy = np.sum((x1**2 + x1 * x2 * x2**2) * (x2 * y1 - x1 * y2)) / 12.
+    #Ix = np.sum((y1**2 + y1 * y2 * y2**2) * (x2 * y1 - x1 * y2)) / 12.
+    #Iy = np.sum((x1**2 + x1 * x2 * x2**2) * (x2 * y1 - x1 * y2)) / 12.
 
-    I0 = Ix + Iy
+    I0 = np.sum(((x1**2 + x1 * x2 * x2**2) + (y1**2 + y1 * y2 * y2**2)) * (x2 * y1 - x1 * y2)) / 12.
     return A, np.array([cx, cy]), I0
 
 def calculate_weighted_stats(weighted_poly):
