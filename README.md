@@ -5,11 +5,11 @@ This repository contains methods and classes for the inverse shadowgraphy analys
 ## Requirements
 This code has been written to require as few external libraries as possible to avoid compatibility issues. The requirements are:
 
--Python version 3.8 or higher (3.7 and lower will be considerably slower due to changes in the multiprocessing module)
--natplotlib
--numpy
--scipy
--cv2
+- Python version 3.8 or higher (3.7 and lower will be considerably slower due to changes in the multiprocessing module)
+- matplotlib
+- numpy
+- scipy
+- cv2
 
 If you're using conda to manage virtual environments, the requirements.txt file can be used to create a new conda environment compatible with this code by running
 ```
