@@ -142,6 +142,8 @@ class Triangle(Polygon):
         return False
     
     def plot(self, ax = None, plot_points = True, plot_circle = False, plot_center = False, circle_options = {}, **kwargs):
+        if self.N == 0:
+            return
         if ax is None:
             ax = plt.gca()
         if 'facecolor' not in kwargs:
@@ -232,6 +234,8 @@ class WeightedPolygon:
         return
      
     def plot(self, ax = None, plot_points = True, **kwargs):
+        if self.N == 0:
+            return
         if ax is None:
             ax = plt.gca()
         if 'facecolor' not in kwargs:
@@ -262,14 +266,16 @@ def calculate_shape_stats(polygon):
     if A == 0:
         cx = np.mean(x1)
         cy = np.mean(y1)
+        Ix = 0
+        Iy = 0
     else:
         cx = np.sum((x1 + x2) * (x2 * y1 - x1 * y2)) / (6*A)
         cy = np.sum((y1 + y2) * (x2 * y1 - x1 * y2)) / (6*A)
 
-    #Ix = np.sum((y1**2 + y1 * y2 * y2**2) * (x2 * y1 - x1 * y2)) / 12.
-    #Iy = np.sum((x1**2 + x1 * x2 * x2**2) * (x2 * y1 - x1 * y2)) / 12.
+        Ix = np.sum((y1**2 + y1 * y2 + y2**2) * (x2 * y1 - x1 * y2)) / 12.
+        Iy = np.sum((x1**2 + x1 * x2 + x2**2) * (x2 * y1 - x1 * y2)) / 12.
 
-    I0 = np.sum(((x1**2 + x1 * x2 * x2**2) + (y1**2 + y1 * y2 * y2**2)) * (x2 * y1 - x1 * y2)) / 12.
+    I0 = Ix + Iy
     return A, np.array([cx, cy]), I0
 
 def calculate_weighted_stats(weighted_poly):
@@ -282,7 +288,7 @@ def calculate_weighted_stats(weighted_poly):
         return calculate_shape_stats(weighted_poly)
     cx = np.sum(image * A_map * c_map[0]) / A
     cy = np.sum(image * A_map * c_map[1]) / A
-    I0 = np.sum(image * A_map * I_map) / A
+    I0 = np.sum(image * I_map)
     
     return A, np.array([cx, cy]), I0
     

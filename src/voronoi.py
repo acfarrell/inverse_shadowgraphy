@@ -6,6 +6,7 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 from scipy.spatial import ConvexHull
 import multiprocessing as mp
+import logging as log
 
 from . import shapes
 
@@ -250,9 +251,9 @@ class Voronoi:
             
             convergence = abs(centroids - old_centroids)/ old_centroids
             if verbose:
-                print(f'Centroids shifted by up to {np.max(convergence)*100:.2f}% after {i+1} iterations', end='\r')
+                log.debug(f'Centroids shifted by up to {np.max(convergence)*100:.2f}% after {i+1} iterations')
             if np.all(convergence < threshold):
-                print(f"All centroids within {threshold * 100}% after {i+1} iterations of Lloyd relaxation")
+                log.info(f"All centroids within {threshold * 100}% after {i+1} iterations of Lloyd relaxation")
                 break
         return
     

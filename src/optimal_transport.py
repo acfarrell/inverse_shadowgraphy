@@ -42,6 +42,7 @@ def get_deflection_potential(target_image,
                              source_image = None, 
                              N=100,
                              lloyd_thresh = 0.1, 
+                             interp_method = 'cubic',
                              sites = None):
     
     shape = source_image.shape
@@ -60,13 +61,13 @@ def get_deflection_potential(target_image,
     target = vor.Voronoi(source.sites, shape, image = target_image, weights = w0, clip=False)
     
     bounds = [(0,None) for site in sites]
-    max_iter = 100
+    max_iter = max(shape) * 4
     
     log.info('Optimizing cell weights on the target plane (this will take a while)...')
-    result = minimize(f, w0, args=(source, target), 
+    result = minimize(f, w0, args=(source, target,{'Nfeval':0}), 
                             jac = True, 
                             bounds = bounds,
-                            method='L-BFGS-B',
+                            method='L-BFGS-B',#L-BFGS-B
                             options={'maxiter':max_iter}
                      )
 
@@ -90,8 +91,8 @@ def get_deflection_potential(target_image,
     
     log.info('Interpolating the displacements...')
 
-    x_map = griddata(sites,centroids[:,0],(X, Y), method= 'cubic' )
-    y_map = griddata(sites,centroids[:,1],(X, Y), method= 'cubic' )
+    x_map = griddata(sites,centroids[:,0],(X, Y), method= interp_method )
+    y_map = griddata(sites,centroids[:,1],(X, Y), method= interp_method )
     
     alpha_x = x_map - X
     alpha_y = y_map - Y
@@ -107,9 +108,9 @@ def get_deflection_potential(target_image,
     
     log.info('Finished')
     
-    return target, phi, alpha_x, alpha_y
+    return target, phi, alpha_x, alpha_y, result
     
-def f(weights, source, target):
+def f(weights, source, target, minInfo):
     """ Returns the minimization function and its gradient"""
     S = source.A
     target.weights = weights
@@ -123,7 +124,16 @@ def f(weights, source, target):
     
     f = np.sum(weights * (T - S) - I_0)
     grad = T - S
-
+    nfev = minInfo['Nfeval']
+    if nfev%5 == 0:
+        log.info(f"nfev = {nfev}, f = {f:.1f}")
+        with np.printoptions(precision=1, suppress=True):
+            log.debug(f"A = {T[:5]}")
+            log.debug(f"I = {I[0:5]}")
+            log.debug(f"c = {c[0:5]}")
+            log.debug(f"p = {p[0:5]}")
+            log.debug(f"Ix0 = {I_0[0:5]}")
+    minInfo['Nfeval'] += 1
     return f, grad
 
 def move_to_corners(shape, sites):

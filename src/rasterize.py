@@ -8,38 +8,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.path import Path
 from . import shapes
-from multiprocessing import Pool, cpu_count
-import multiprocessing as mp
-
-
-def rasterize_MP(polygon, shape):
-    ''' Pixelate the given polygon to an integer grid of given shape '''
-    Y, X = np.indices(shape)
-
-    area_map = np.zeros(shape)
-    centroid_map = np.stack((X, Y)).astype(float)
-    I_map = np.sum(centroid_map**2, axis = 0) + 1/6.
-
-    enclosed = get_enclosed_pixels(polygon, shape)
-    area_map[enclosed] = 1
-    centroid_map[:,~enclosed] = -1
-    I_map[~enclosed] = -1
-    
-    edges = get_edge_pixels(polygon, shape)
-    
-    edge_pixels = np.stack((X[edges], Y[edges])).T
-    args = [(pix, polygon) for pix in edge_pixels]
-    
-    pool = Pool(4)
-    pixs = pool.map(clip_pixel_wrapper, args)
-    for pixel, pix in zip(edge_pixels, pixs):
-        idx = (pixel[1], pixel[0])
-        if pix.N == 0:
-            continue
-        area_map[idx] = pix.A
-        centroid_map[:, pixel[1], pixel[0]] = pix.c[0], pix.c[1]
-        I_map[idx] = pix.I
-    return area_map, centroid_map, I_map
 
 def rasterize(polygon, shape, plot = False, **kwargs):
     ''' Pixelate the given polygon to an integer grid of given shape '''
@@ -48,11 +16,11 @@ def rasterize(polygon, shape, plot = False, **kwargs):
     area_map = np.zeros(shape)
     centroid_map = np.stack((X, Y)).astype(float)
     I_map = np.sum(centroid_map**2, axis = 0) + 1/6.
-
+    #print(f'c_map = {centroid_map[:, 5,5]}, I_map = {I_map[5,5]}')
     enclosed = get_enclosed_pixels(polygon, shape)
     area_map[enclosed] = 1
     centroid_map[:,~enclosed] = -1
-    I_map[~enclosed] = -1
+    I_map[~enclosed] = 0
     
     edges = get_edge_pixels(polygon, shape)
     
@@ -73,13 +41,6 @@ def rasterize(polygon, shape, plot = False, **kwargs):
             pix.plot(**kwargs)
     return area_map, centroid_map, I_map
 
-def clip_pixel_wrapper(args):
-    return clip_pixel(*args)
-
-def clip_pixel(pixel, polygon):
-    pix = shapes.Pixel(pixel)
-    pix.clip_to(polygon)
-    return pix
 def get_edge_pixels(polygon, shape):
     ''' Find all the pixels that are intersected by the edges of the polygon '''
     h, w = shape
