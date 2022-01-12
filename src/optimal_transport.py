@@ -46,6 +46,7 @@ def get_deflection_potential(target_image,
                              sites = None):
     
     shape = source_image.shape
+    h, w = shape
     Y, X = np.indices(shape)
 
     if sites is not None:
@@ -82,7 +83,8 @@ def get_deflection_potential(target_image,
     target.weights = result.x
     centroids = np.copy(target.c)
     # Remove any invalid centroids (corresponding to sites whose Voronoi cells vanished)
-    valid = np.all(centroids != -1, axis=1)
+    valid = np.all(centroids >= -.5, axis=1) 
+    valid *= (centroids[:,0] < w)  * (centroids[:,1] < h)
     centroids = centroids[valid]
     sites = target.sites[valid]
 
@@ -98,8 +100,8 @@ def get_deflection_potential(target_image,
     alpha_y = y_map - Y
     
     log.info('Calculating the deflection potential...')
-    phi_x = np.cumsum(alpha_x, axis=1)
-    phi_y = np.cumsum(alpha_y, axis=0)
+    phi_x = -1 * np.cumsum(alpha_x, axis=1)
+    phi_y = -1 * np.cumsum(alpha_y, axis=0)
     
     phi = (phi_x + phi_y) / 2
     
