@@ -17,7 +17,7 @@ use_previous_source = False
 previous_source = 'output/output_test.npz'
 
 # Define the target plane image file you want to analyze.
-target_image_file = 'structure-1.png'
+target_image_file = 'test.png'
 
 # Define the number of sites you'd like to use
 # If passed None or omitted the default is 0.8 * N_pixels in the image
@@ -37,7 +37,7 @@ output_directory = '/home/oods/Research/AE98-99/Analysis/voronoi/output/'
 # Define the suffix you'd like to put at the end of any output filenames
 # For example output_suffix = 'test' would change 'log.txt' to 'log_test.txt'
 # Passing None will default to using the current date and time when the script is run
-output_suffix = 'test'
+output_suffix = 'test2'
 
 # Give the filename where you'd like the script to log its system output.
 # If passed None the code will print to the console as it runs.
