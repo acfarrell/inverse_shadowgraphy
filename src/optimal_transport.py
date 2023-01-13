@@ -1,4 +1,5 @@
 import numpy as np
+import os
 import logging as log
 from . import voronoi as vor
 import matplotlib.pyplot as plt
@@ -15,6 +16,9 @@ def initialize_sites(source_image = None, N=100, lloyd_thresh = 0.1):
         # if there is no source plane image, assume a uniform background and normalize to sum to 1
         source_image = np.ones_like(target_image)
         source_image /= np.sum(source_image)
+        uniform = True
+    else:
+        uniform = False
     
     shape = source_image.shape
     h, w = shape
@@ -33,18 +37,28 @@ def initialize_sites(source_image = None, N=100, lloyd_thresh = 0.1):
     noise = np.random.rand(*sites.shape) - 0.5
     sites += noise
     
-    source = vor.Voronoi(sites, shape, image = source_image, clip=False)
+    if uniform:
+        source = vor.Voronoi(sites, shape, clip = False)
+    else:
+        source = vor.Voronoi(sites, shape, image = source_image, clip=False)
     log.info('Performing Lloyd relaxation on the source plane...')
     source.lloyd(threshold = lloyd_thresh)
+    
+    source_fname = 'source_plane.npz'
+    if not os.path.isfile(source_fname):
+        np.savez('source_plane.npz', 
+                 sites=source.sites,
+                 source_image=source_image)
+    
     return source
 
 def get_deflection_potential(target_image,
                              source_image = None, 
                              N=100,
                              lloyd_thresh = 0.1, 
-                             interp_method = 'cubic',
+                             interp_method = 'linear',
                              sites = None):
-    
+   
     shape = source_image.shape
     h, w = shape
     Y, X = np.indices(shape)
