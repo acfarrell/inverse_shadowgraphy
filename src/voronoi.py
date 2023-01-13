@@ -31,9 +31,11 @@ class Voronoi:
         if image is None:
             self.image = np.ones(shape)
             self.shape = shape
+            self.uniform = True
         else:
             self.image = image
             self.shape = image.shape
+            self.uniform = False
         self.clip = clip
         # Calculate the weighted Voronoi diagram
         self.get_Voronoi()
@@ -124,7 +126,7 @@ class Voronoi:
         From all of the delaunay edges and Voronoi vertices get the vertices defining each
         cell in the power diagram and define a Polygon object for that cell
         '''
-        args = [(i, self.delaunay_edges, self.vertices, self.image, self.clip) for i in range(self.N)]
+        args = [(i, self.delaunay_edges, self.vertices, self.image, self.clip, self.uniform) for i in range(self.N)]
         pool = mp.Pool()
         cells = pool.map(get_cell_wrapper, args)
         
@@ -308,13 +310,15 @@ class Voronoi:
         # Fix aspect ratio so pixels are always square
         ax.set_aspect('equal')
         
-def get_cell(i, edges, vertices, image, clip = True):
+def get_cell(i, edges, vertices, image, clip = True, uniform = False):
     # Find the indices of the Delaunay edges containing each site
     edge_idx = np.argwhere(edges == i)[:,0]
 
     # Get the Voronoi vertices from each of those delaunay edges
     verts = vertices[edge_idx]
     if verts.size == 0:
+        if uniform:
+            return shapes.Polygon(verts)
         return shapes.WeightedPolygon(verts, image)
 
     # Remove any duplicate vertices
@@ -324,7 +328,10 @@ def get_cell(i, edges, vertices, image, clip = True):
     # Sort the vertices in clockwise order
     verts = np.array(sorted(verts,
                             key = lambda v: np.arctan2((v[0] - c[0]), (v[1] - c[1]))))
-    cell = shapes.WeightedPolygon(verts, image)
+    if uniform:
+        cell = shapes.Polygon(verts)
+    else:
+        cell = shapes.WeightedPolygon(verts, image)
     
     if clip:
         # Crop to bounding box
