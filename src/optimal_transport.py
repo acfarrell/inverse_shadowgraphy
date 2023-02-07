@@ -5,6 +5,7 @@ from . import voronoi as vor
 import matplotlib.pyplot as plt
 from scipy.optimize import minimize
 from scipy.interpolate import griddata
+#from scipy.interpolate import RectBivariateSpline
 from scipy.spatial import distance
 
 def initialize_sites(source_image = None, N=100, lloyd_thresh = 0.1):
@@ -57,7 +58,8 @@ def get_deflection_potential(target_image,
                              N=100,
                              lloyd_thresh = 0.1, 
                              interp_method = 'linear',
-                             sites = None):
+                             sites = None,
+                             output_dir = None):
    
     shape = source_image.shape
     h, w = shape
@@ -71,7 +73,22 @@ def get_deflection_potential(target_image,
 
     sites = source.sites
     # Initial guess of the weights
-    w0 = np.zeros(N)
+    if output_dir is not None:
+        if os.path.isfile(output_dir + 'restart.npz'):
+            log.info(f'Loading restart file at {str(output_dir) + "restart.npz"}')
+            restart = np.load(output_dir + 'restart.npz')
+            if np.array_equal(restart['sites'], sites, equal_nan=True):
+                log.info('Restart file loaded with correct sites, continuing where optimization left off...')
+                w0 = restart['weights']
+            else:
+                log.info('Restart file contained different sites than current run, starting with zero weights...')
+                w0 = np.zeros(N)  
+        else:
+            log.info(f'No restart file found, initializing weights as zero...')
+            w0 = np.zeros(N)  
+    else:
+        log.info(f'No output directory given for restart files, initializing weights as zero...')
+        w0 = np.zeros(N)
     
     target = vor.Voronoi(source.sites, shape, image = target_image, weights = w0, clip=False)
     
@@ -79,7 +96,7 @@ def get_deflection_potential(target_image,
     max_iter = max(shape) * 4
     
     log.info('Optimizing cell weights on the target plane (this will take a while)...')
-    result = minimize(f, w0, args=(source, target,{'Nfeval':0}), 
+    result = minimize(f, w0, args=(source, target,{'Nfeval':0}, output_dir), 
                             jac = True, 
                             bounds = bounds,
                             method='L-BFGS-B',#L-BFGS-B
@@ -106,9 +123,15 @@ def get_deflection_potential(target_image,
     sites = move_to_corners(source_image.shape, sites)
     
     log.info('Interpolating the displacements...')
-
+    interp_order = 1
     x_map = griddata(sites,centroids[:,0],(X, Y), method= interp_method )
     y_map = griddata(sites,centroids[:,1],(X, Y), method= interp_method )
+    #interp_x = RectBivariateSpline(sites.T[0], sites.T[1],centroids[:,0],
+    #                               kx=interp_order, ky=interp_order )    
+    #interp_y = RectBivariateSpline(sites.T[0], sites.T[1],centroids[:,1],
+    #                               kx=interp_order, ky=interp_order )
+    #x_map = interp_x.ev(X.flatten(), Y.flatten()).reshape(X.shape)
+    #y_map = interp_y.ev(X.flatten(), Y.flatten()).reshape(X.shape)
     
     alpha_x = x_map - X
     alpha_y = y_map - Y
@@ -126,7 +149,7 @@ def get_deflection_potential(target_image,
     
     return target, phi, alpha_x, alpha_y, result
     
-def f(weights, source, target, minInfo):
+def f(weights, source, target, minInfo, output_dir):
     """ Returns the minimization function and its gradient"""
     S = source.A
     target.weights = weights
@@ -143,6 +166,11 @@ def f(weights, source, target, minInfo):
     nfev = minInfo['Nfeval']
     if nfev%5 == 0:
         log.info(f"nfev = {nfev}, f = {f:.1f}")
+        if output_dir is not None:
+            np.savez(output_dir + 'restart.npz', 
+                     sites=source.sites,
+                     weights=weights)
+        
         with np.printoptions(precision=1, suppress=True):
             log.debug(f"A = {T[:5]}")
             log.debug(f"I = {I[0:5]}")

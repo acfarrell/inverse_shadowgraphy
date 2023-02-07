@@ -84,7 +84,8 @@ def initialize():
         
         # Load the target plane image file name
         try:
-            target_file = data_dir + init.target_image_file
+            target_fname = init.target_image_file
+            target_file = data_dir + target_fname
             log.info(f'Target image: {target_file}')
         except AttributeError:
             log.exception('No target image file was given!\n')
@@ -184,12 +185,12 @@ def initialize():
         # Fix plotting warnings
         mpl.rcParams['pcolor.shading'] = 'auto'
         log.info(f'Successfully pulled input parameters from {input_fname}.\n')
-        return params, target_file, output_dir, suffix, save_txt
+        return params, target_fname, output_dir, suffix, save_txt
     
     
 def save_run(target_fname, output_dir, suffix, save_txt, results):
     '''Save all the data for this run'''
-    fname = output_dir + target_fname.split('.') + '_output' + suffix + '.npz'
+    fname = output_dir + target_fname[:-4] + '_output' + suffix + '.npz'
     log.info(f'Saving run data to {fname}')
     np.savez(fname, **results)
     return
@@ -199,7 +200,7 @@ def main():
 
     params, target_fname, output_dir, suffix, save_txt = initialize()
 
-    target, phi_c, alpha_x, alpha_y, result = ot.get_deflection_potential(**params)
+    target, phi_c, alpha_x, alpha_y, result = ot.get_deflection_potential(**params, output_dir = output_dir)
     
     results = {'target_image':target.image,
                'source_image': params['source_image'],

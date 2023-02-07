@@ -70,6 +70,9 @@ class Polygon:
         if 'edgecolor' not in kwargs:
             kwargs['edgecolor'] = 'k'
         verts = self.vertices.T
+        if verts.size == 0:
+            return
+        #print(verts)
         ax.fill(verts[0], verts[1], **kwargs)
         
         if plot_points:

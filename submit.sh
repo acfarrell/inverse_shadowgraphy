@@ -12,7 +12,7 @@
 
 # set up for problem & define any environment variables here
 module load python
-conda activate shadow_2021_jup
+conda activate shadow_2021
 
 srun -n 1 --cpu-bind=none python invert.py ae98_2022
 
