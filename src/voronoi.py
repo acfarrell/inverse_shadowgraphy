@@ -15,6 +15,7 @@ class Voronoi:
     Class for calculating 2D power diagrams, i.e. weighted Voronoi tesselations
     """
     def __init__(self, sites, shape = None, weights=None, image = None, clip = True):
+        #self.pool = mp.Pool()
         self._sites = sites
         self.N = sites.shape[0]
         
@@ -127,14 +128,20 @@ class Voronoi:
         cell in the power diagram and define a Polygon object for that cell
         '''
         args = [(i, self.delaunay_edges, self.vertices, self.image, self.clip, self.uniform) for i in range(self.N)]
-        pool = mp.Pool()
-        cells = pool.map(get_cell_wrapper, args)
+        with mp.Pool() as pool:
+            cells = pool.map(get_cell_wrapper, args)
         
         self.regions = cells
         stats = [(cell.A, cell.c, cell.I) for cell in cells]
         stats = list(zip(*stats))
         
-        self.A, self.c, self.I = np.array(stats[0]), np.array(stats[1]), np.array(stats[2])
+        # Check where centroids have become negative (due to cell vanishing) and reset to 
+        # the site coordinates
+        c = np.array(stats[1])
+        vanished = c[:,0] == -1#np.isclose(c[:,0], -1)
+        c[vanished] = self.sites[vanished]
+        log.debug(f'{np.sum(vanished)} cells vanished')
+        self.A, self.c, self.I = np.array(stats[0]), c, np.array(stats[2])
         
     def get_delaunay_edges(self):
         """ 
@@ -246,6 +253,7 @@ class Voronoi:
         # Get threshold distance in pixels
         centroids = self.c
         for i in range(MAXDEPTH):
+            #log.info(f"Lloyd relaxation iteration {i}")
             old_centroids = np.copy(centroids)
             self.sites = centroids
             centroids = self.c

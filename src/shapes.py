@@ -288,10 +288,14 @@ def calculate_weighted_stats(weighted_poly):
     
     A = np.sum(image * A_map)
     if A == 0:
-        return calculate_shape_stats(weighted_poly)
-    cx = np.sum(image * A_map * c_map[0]) / A
-    cy = np.sum(image * A_map * c_map[1]) / A
-    I0 = np.sum(image * I_map)
+        cx = -1
+        cy = -1
+        I0 = 0
+        #return calculate_shape_stats(weighted_poly)
+    else:
+        cx = np.sum(image * A_map * c_map[0]) / A
+        cy = np.sum(image * A_map * c_map[1]) / A
+        I0 = np.sum(image * I_map)
     
     return A, np.array([cx, cy]), I0
     

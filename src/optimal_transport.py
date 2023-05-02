@@ -8,7 +8,7 @@ from scipy.interpolate import griddata
 #from scipy.interpolate import RectBivariateSpline
 from scipy.spatial import distance
 
-def initialize_sites(source_image = None, N=100, lloyd_thresh = 0.1):
+def initialize_sites(source_image = None, N=100, lloyd_thresh = 0.1,uniform=False):
     '''
     Deploy N random sites on the target image and perform Lloyd relaxation
     '''
@@ -18,12 +18,10 @@ def initialize_sites(source_image = None, N=100, lloyd_thresh = 0.1):
         source_image = np.ones_like(target_image)
         source_image /= np.sum(source_image)
         uniform = True
-    else:
-        uniform = False
     
     shape = source_image.shape
     h, w = shape
-    Y, X = np.indices(shape)
+    Y, X = np.indices(shape).astype(np.float64)
     
     # Randomly deploy sites on the source plane 
     weights = source_image.flatten() / np.sum(source_image)
@@ -39,7 +37,7 @@ def initialize_sites(source_image = None, N=100, lloyd_thresh = 0.1):
     sites += noise
     
     if uniform:
-        source = vor.Voronoi(sites, shape, clip = False)
+        source = vor.Voronoi(sites, shape, clip = True)
     else:
         source = vor.Voronoi(sites, shape, image = source_image, clip=False)
     log.info('Performing Lloyd relaxation on the source plane...')
@@ -82,17 +80,18 @@ def get_deflection_potential(target_image,
                 w0 = restart['weights']
             else:
                 log.info('Restart file contained different sites than current run, starting with zero weights...')
-                w0 = np.zeros(N)  
+                w0 = np.zeros(N, dtype=np.float64)  
         else:
             log.info(f'No restart file found, initializing weights as zero...')
-            w0 = np.zeros(N)  
+            w0 = np.zeros(N, dtype=np.float64)  
     else:
         log.info(f'No output directory given for restart files, initializing weights as zero...')
-        w0 = np.zeros(N)
+        w0 = np.zeros(N, dtype=np.float64)
     
     target = vor.Voronoi(source.sites, shape, image = target_image, weights = w0, clip=False)
     
-    bounds = [(0,None) for site in sites]
+    # the weight should never be larger than the image itself
+    bounds = [(0, None) for site in sites]
     max_iter = max(shape) * 4
     
     log.info('Optimizing cell weights on the target plane (this will take a while)...')
@@ -100,11 +99,12 @@ def get_deflection_potential(target_image,
                             jac = True, 
                             bounds = bounds,
                             method='L-BFGS-B',#L-BFGS-B
-                            options={'maxiter':max_iter}
+                            options={'maxiter':max_iter, 'maxls':30},#'ftol':1e-8, 'gtol':1e-8, 'maxls':30}
                      )
-
+# maxls=30
     if result.success:
         log.info(f'Minimization succeeded after {result.nit} iterations and {result.nfev} power diagrams')
+        log.info(result.message)
     else:
         log.warning(f'Minimization failed after {result.nit} iterations and {result.nfev} power diagrams')
         log.info(result.message)
@@ -112,9 +112,9 @@ def get_deflection_potential(target_image,
     
     log.info('Calculating the centroids of the optimized cells...')
     target.weights = result.x
+    # Remove any invalid areas (corresponding to sites whose Voronoi cells vanished)
     centroids = np.copy(target.c)
-    # Remove any invalid centroids (corresponding to sites whose Voronoi cells vanished)
-    valid = np.all(centroids >= -.5, axis=1) 
+    valid = target.A > 0
     valid *= (centroids[:,0] < w)  * (centroids[:,1] < h)
     centroids = centroids[valid]
     sites = target.sites[valid]
@@ -165,7 +165,8 @@ def f(weights, source, target, minInfo, output_dir):
     grad = T - S
     nfev = minInfo['Nfeval']
     if nfev%5 == 0:
-        log.info(f"nfev = {nfev}, f = {f:.1f}")
+        n_vanished = np.sum(T==0)
+        log.info(f"nfev = {nfev}, f = {f:.2f}, n_vanished = {n_vanished}")
         if output_dir is not None:
             np.savez(output_dir + 'restart.npz', 
                      sites=source.sites,

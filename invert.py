@@ -7,7 +7,7 @@ import importlib
 import logging as log
 import cv2
 import multiprocessing as mp
-
+import shutil
 # Import the optimal transport module
 from src import optimal_transport as ot
 importlib.reload(ot)
@@ -56,7 +56,7 @@ def initialize():
             log_level = getattr(log, init.log_level.upper(), None)
         except AttributeError:
             log_level = getattr(log, 'INFO', None)
-
+        
         
         if log_file is None:
             log.basicConfig(level=log_level, format='')
@@ -66,7 +66,11 @@ def initialize():
             log.basicConfig(filename = log_file, filemode='w', level=log_level, format='')
         log.info(f'Beginning analysis at {start_time}...\n')
         log.info(f'All output will be saved to the {outdir_status} directory {output_dir}\n')
-
+        
+        # Copy the input deck into the output directory
+        shutil.copy('input/'+str(sys.argv[1])+'.py', output_dir+'input-deck.py')
+        log.info(f'Input deck copied into output directory as input-deck.py')
+        
         try:
             data_dir = str(init.data_directory)
         except AttributeError:
